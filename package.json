@@ -1,7 +1,7 @@
 {
-  "name": "chat-app",
+  "name": "coinflip-game",
   "version": "1.0.0",
-  "description": "Simple chat application deployable on Koyeb",
+  "description": "Coinflip game application deployable on Koyeb",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
