@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple Chat App</title>
+    <title>Coinflip Game</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -11,50 +11,133 @@
             margin: 0 auto;
             padding: 20px;
         }
-        #messages {
+        #game-list, #game-status {
             border: 1px solid #ccc;
             padding: 10px;
-            height: 300px;
-            overflow-y: scroll;
             margin-bottom: 10px;
         }
-        #message-form {
+        #game-list div, button {
+            margin: 5px;
+            padding: 5px;
+        }
+        #game-form, #choice-form {
             display: flex;
             gap: 10px;
+            margin-bottom: 10px;
         }
-        #message-input {
-            flex: 1;
+        input {
             padding: 5px;
+        }
+        button {
+            cursor: pointer;
+        }
+        .hidden {
+            display: none;
         }
     </style>
 </head>
 <body>
-    <h1>Chat Application</h1>
-    <div id="messages"></div>
-    <form id="message-form">
-        <input id="message-input" autocomplete="off" /><button>Send</button>
-    </form>
+    <h1>Coinflip Game</h1>
+    <div id="game-form">
+        <input id="player-name" placeholder="Your name" autocomplete="off" />
+        <button onclick="createGame()">Create Game</button>
+    </div>
+    <div id="game-list"></div>
+    <div id="game-status" class="hidden">
+        <p id="status-text"></p>
+        <div id="choice-form" class="hidden">
+            <button onclick="makeChoice('heads')">Heads</button>
+            <button onclick="makeChoice('tails')">Tails</button>
+        </div>
+        <p id="result-text"></p>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const form = document.getElementById('message-form');
-        const input = document.getElementById('message-input');
-        const messages = document.getElementById('messages');
+        const playerNameInput = document.getElementById('player-name');
+        const gameList = document.getElementById('game-list');
+        const gameStatus = document.getElementById('game-status');
+        const statusText = document.getElementById('status-text');
+        const choiceForm = document.getElementById('choice-form');
+        const resultText = document.getElementById('result-text');
 
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            if (input.value) {
-                socket.emit('chat message', input.value);
-                input.value = '';
+        let currentGameId = null;
+
+        function createGame() {
+            const name = playerNameInput.value.trim();
+            if (name) {
+                socket.emit('create-game', name);
             }
+        }
+
+        function joinGame(gameId) {
+            const name = playerNameInput.value.trim();
+            if (name) {
+                socket.emit('join-game', { gameId, playerName: name });
+            }
+        }
+
+        function makeChoice(choice) {
+            if (currentGameId) {
+                socket.emit('make-choice', { gameId: currentGameId, choice });
+                choiceForm.classList.add('hidden');
+            }
+        }
+
+        socket.on('game-created', ({ gameId, playerName }) => {
+            currentGameId = gameId;
+            gameStatus.classList.remove('hidden');
+            statusText.textContent = `Game created! Waiting for opponent... (Game ID: ${gameId})`;
+            gameList.classList.add('hidden');
+            gameForm.classList.add('hidden');
         });
 
-        socket.on('chat message', (msg) => {
-            const item = document.createElement('div');
-            item.textContent = msg;
-            messages.appendChild(item);
-            messages.scrollTop = messages.scrollHeight;
+        socket.on('game-started', ({ gameId, creator, opponent }) => {
+            currentGameId = gameId;
+            gameStatus.classList.remove('hidden');
+            statusText.textContent = `Game started! ${creator} vs ${opponent}. Choose heads or tails.`;
+            choiceForm.classList.remove('hidden');
+            gameList.classList.add('hidden');
+            gameForm.classList.add('hidden');
+        });
+
+        socket.on('game-result', ({ result, winner, creatorChoice, opponentChoice }) => {
+            statusText.textContent = `Coin landed on ${result}!`;
+            resultText.textContent = winner ? `${winner} wins!` : 'It\'s a tie!';
+            choiceForm.classList.add('hidden');
+            setTimeout(() => {
+                gameStatus.classList.add('hidden');
+                gameList.classList.remove('hidden');
+                gameForm.classList.remove('hidden');
+                resultText.textContent = '';
+                currentGameId = null;
+            }, 3000);
+        });
+
+        socket.on('game-list', (games) => {
+            gameList.innerHTML = '';
+            games.forEach(gameId => {
+                const div = document.createElement('div');
+                div.textContent = `Game ${gameId}`;
+                const joinButton = document.createElement('button');
+                joinButton.textContent = 'Join';
+                joinButton.onclick = () => joinGame(gameId);
+                div.appendChild(joinButton);
+                gameList.appendChild(div);
+            });
+        });
+
+        socket.on('error', (message) => {
+            alert(message);
+            gameStatus.classList.add('hidden');
+            gameList.classList.remove('hidden');
+            gameForm.classList.remove('hidden');
+            currentGameId = null;
+        });
+
+        socket.on('connect', () => {
+            socket.emit('get-game-list');
         });
     </script>
 </body>
